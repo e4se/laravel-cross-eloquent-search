@@ -1,4 +1,6 @@
-<?php declare(strict_types=1);
+<?php
+
+declare(strict_types=1);
 
 namespace ProtoneMedia\LaravelCrossEloquentSearch;
 
@@ -136,9 +138,10 @@ class ModelToSearchThrough
      * @param string $suffix
      * @return string
      */
-    public function getModelKey($suffix = 'key'): string
+    public function getModelKey($suffix = 'key', $prefix = 'lceq'): string
     {
         return implode('_', [
+            $prefix,
             $this->key,
             Str::snake(class_basename($this->getModel())),
             $suffix,

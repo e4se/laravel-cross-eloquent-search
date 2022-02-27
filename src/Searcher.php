@@ -1,4 +1,6 @@
-<?php declare(strict_types=1);
+<?php
+
+declare(strict_types=1);
 
 namespace ProtoneMedia\LaravelCrossEloquentSearch;
 
@@ -483,7 +485,7 @@ class Searcher
      */
     private function addWhereTermsToQuery(Builder $query, $column)
     {
-        $column = $this->ignoreCase ? (new MySqlGrammar)->wrap($column) : $column;
+        $column = $this->ignoreCase ? $query->getQuery()->getGrammar()->wrap($column) : $column;
 
         $this->terms->each(function ($term) use ($query, $column) {
             $this->ignoreCase
@@ -499,7 +501,7 @@ class Searcher
      * @param \ProtoneMedia\LaravelCrossEloquentSearch\ModelToSearchThrough $modelToSearchThrough
      * @return void
      */
-    private function addRelevanceQueryToBuilder($builder, $modelToSearchThrough)
+    private function addRelevanceQueryToBuilder(Builder $builder, $modelToSearchThrough)
     {
         if (!$this->isOrderingByRelevance() || $this->termsWithoutWildcards->isEmpty()) {
             return;
@@ -509,8 +511,8 @@ class Searcher
             throw OrderByRelevanceException::new();
         }
 
-        $expressionsAndBindings = $modelToSearchThrough->getQualifiedColumns()->flatMap(function ($field) {
-            $field = (new MySqlGrammar)->wrap($field);
+        $expressionsAndBindings = $modelToSearchThrough->getQualifiedColumns()->flatMap(function ($field) use ($builder) {
+            $field = $builder->getQuery()->getGrammar()->wrap($field);
 
             return $this->termsWithoutWildcards->map(function ($term) use ($field) {
                 return [
@@ -537,7 +539,8 @@ class Searcher
     {
         return $this->modelsToSearchThrough->flatMap(function (ModelToSearchThrough $modelToSearchThrough) use ($currentModel) {
             $qualifiedKeyName = $qualifiedOrderByColumnName = $modelOrderKey = 'null';
-
+            $qualifiedKeyName = "CAST(NULL as bigint)";
+            $qualifiedOrderByColumnName = "CAST(NULL as timestamp)";
             if ($modelToSearchThrough === $currentModel) {
                 $prefix = $modelToSearchThrough->getModel()->getConnection()->getTablePrefix();
 
@@ -574,7 +577,7 @@ class Searcher
     {
         $modelOrderKeys = $this->modelsToSearchThrough->map->getModelKey('order')->implode(',');
 
-        return "COALESCE({$modelOrderKeys})";
+        return "COALESCE({$modelOrderKeys},NULL)";
     }
 
     /**
@@ -618,11 +621,11 @@ class Searcher
     }
 
     /**
-      * Compiles all queries to one big one which binds everything together
-      * using UNION statements.
-      *
-      * @return
-      */
+     * Compiles all queries to one big one which binds everything together
+     * using UNION statements.
+     *
+     * @return
+     */
     protected function getCompiledQueryBuilder(): QueryBuilder
     {
         $queries = $this->buildQueries();
@@ -631,10 +634,9 @@ class Searcher
 
         /** @var BaseBuilder $firstQuery */
         $firstQuery = $queries->shift()->toBase();
-
         // union the other queries together
         $queries->each(fn (Builder $query) => $firstQuery->union($query));
-
+        $firstQuery = DB::table($firstQuery, 't1');
         if ($this->orderByModel) {
             $firstQuery->orderBy(
                 DB::raw($this->makeOrderByModel()),
